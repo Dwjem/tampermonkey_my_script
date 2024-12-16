@@ -5,6 +5,10 @@
 // @description  在 wuwu49c.wiki 的视频播放器页面上添加自定义控制按钮
 // @author       你的名字
 // @match        https://wuwu49c.wiki/vodplay/*.html
+// @match        https://5wuxz.shop/vodplay/*.html
+// @match        https://wwnkm.shop/vodplay/*.html
+// @match        https://www.5wuxrb.wiki/vodplay/*.html
+// @match        */vodplay/*.html
 // @grant        none
 // ==/UserScript==
 
@@ -12,7 +16,24 @@
     'use strict';
 
     // 存储键
-    let storeKey = '';
+    let storeKey = { value: '' };
+    // 广告时长键值
+    let forwardTimeStoreKey = ''
+    // 自定义时间存储键
+    let forwardTimeStoreKeyByCustom = ''
+    
+    let storeKeyProxy = new Proxy(storeKey, {
+        set: function (target, key, value) {
+            target[key] = value;
+            forwardTimeStoreKey = value + '_forwardTime';
+            forwardTimeStoreKeyByCustom = value + '_forwardTime_custom';
+            return true;
+        },
+        get(target, prop, receiver) {
+            return Reflect.get(...arguments);
+        }
+    })
+    
     // 存储键获取正则
     let storeKeyReg = /\/vodplay\/(\d+)-/;
     // 要追加父元素的选择器
@@ -28,7 +49,7 @@
     // 设置轮询间隔（以毫秒为单位）
     let pollInterval = 1000; // 1秒
     // icon地址
-    let iconUrl = '//at.alicdn.com/t/c/font_4743067_h9exni96eku.css';
+    let iconUrl = '//at.alicdn.com/t/c/font_4743067_bun8o1mx2yt.css';
     // 按钮的属性
     let buttonAttributes = {
         class: 'art-control art-control-my-control iconfont', // icon-ic_shezhishijianduan
@@ -48,7 +69,6 @@
 
         // 处理子节点
         children.forEach(child => {
-            console.log(child);
             if (typeof child === 'string') {
                 // 如果子节点是字符串，直接添加到children数组中
                 node.props.innerText = child;
@@ -104,10 +124,10 @@
     }
 
     function findStoreKey() {
-        // 使用正则表达式匹配数字部分
+        // 使用正则表达式匹配地址栏中的数字部分
         const match = location.pathname.match(storeKeyReg);
         if (match && match[1]) {
-            storeKey = `video_key_${match[1]}`; // 保存存储键
+            storeKeyProxy.value = `video_key_${match[1]}`; // 保存存储键
         } else {
             alert('无法找到存储键，请调整油猴脚本中获取存储键的正则表达式'); // 如果无法匹配到数字部分，提示用户
         }
@@ -121,18 +141,27 @@
     }
 
     // 将时间保存到浏览器缓存中的函数
-    function saveTime(timeString) {
-        localStorage.setItem(storeKey, timeString); // 使用 localStorage 保存时间字符串
+    function saveTime(key, value) {
+        localStorage.setItem(key, value.toString()); // 使用 localStorage 保存时间字符串
     }
 
     // 从浏览器缓存中加载时间的函数
     function loadTime() {
-        return localStorage.getItem(storeKey); // 从 localStorage 获取时间字符串
+        return localStorage.getItem(storeKeyProxy.value); // 从 localStorage 获取时间字符串
+    }
+
+    // 快进指定秒数的函数
+    function jumpToTime() {
+        return localStorage.getItem(forwardTimeStoreKey); // 从 localStorage 获取时间字符串
+    }
+
+    // 自定义快进指定描述
+    function jumpToTimeDesc() {
+        return localStorage.getItem(forwardTimeStoreKeyByCustom); // 从 localStorage 获取时间字符串
     }
 
     // 跳转到指定时间
-    function handleJumpToTime() {
-        const timeString = loadTime(); // 从浏览器缓存中加载时间
+    function handleJumpToTime(timeString = loadTime()/* 从浏览器缓存中加载时间 */) {
         if (timeString) {
             const [minutes, seconds] = timeString.split(':').map(Number); // 解析时间字符串为分钟和秒数
             const totalSeconds = minutes * 60 + seconds; // 计算总秒数
@@ -151,10 +180,30 @@
     function handleOpenSetTime() {
         const timeString = prompt('输入时间 (mm:ss):', '00:00'); // 弹出提示框让用户输入时间
         if (timeString && /^\d{2}:\d{2}$/.test(timeString)) { // 验证输入的时间格式是否正确
-            saveTime(timeString); // 保存时间到浏览器缓存
+            saveTime(storeKeyProxy.value, timeString); // 保存时间到浏览器缓存
             handleJumpToTime(); // 调用跳转到指定时间的函数
         } else {
-            alert('无效的时间格式。请使用 mm:ss 格式。'); // 提示用户输入的时间格式不正确
+            alert('无效的时间格式，请使用 mm:ss 格式。'); // 提示用户输入的时间格式不正确
+        }
+    }
+
+    // 弹出提示框快进 n 秒
+    function handleOpenForwardTime(isCustom) {
+        const timeString = prompt('输入快进秒数:', 0); // 弹出提示框让用户输入时间
+        if (timeString && /^\d+$/.test(timeString)) { // 验证输入的时间格式是否正确
+            saveTime(isCustom ? forwardTimeStoreKeyByCustom : forwardTimeStoreKey, timeString); // 保存时间到浏览器缓存
+        } else {
+            alert('无效的时间格式，请输入数字。'); // 提示用户输入的时间格式不正确
+        }
+    }
+
+    // 快进 n 秒
+    function handleForwardTime(seconds) {
+        const videoElement = iframeDOM.querySelector('video.art-video'); // 查找视频元素
+        if (videoElement) {
+            videoElement.currentTime += Number(seconds); // 快进 n 秒
+        } else {
+            alert('未找到视频元素。'); // 如果未找到视频元素，提示用户
         }
     }
 
@@ -205,6 +254,57 @@
         return jumpToTimeButton;
     }
 
+    // 创建第三个按钮，用于快进 n 秒
+    function createForwardButton() {
+        const forwardButton = h('div', {
+            ...buttonAttributes,
+        },
+            h('i', {
+                class: 'iconfont icon-ad',
+                title: '跳过广告',
+                style: {
+                    cursor: 'pointer',
+                    color: 'red'
+                },
+                onclick: () => {
+                    const seconds = jumpToTime();
+                    if (seconds) {
+                        handleForwardTime(seconds); // 调用跳转到指定时间的函数
+                    } else {
+                        handleOpenForwardTime()
+                    }
+                }
+            }),
+            "",
+        )
+        return forwardButton;
+    }
+
+    // 创建第四个按钮，自定义跳转时间
+    function createForwardTimeButton() {
+        return h('div', {
+            ...buttonAttributes,
+        },
+            h('i', {
+                class: 'iconfont icon-dingwei',
+                title: '自定义跳转',
+                style: {
+                    cursor: 'pointer',
+                    color: 'red'
+                },
+                onclick: () => {
+                    const seconds = jumpToTimeDesc();
+                    if (seconds) {
+                        handleForwardTime(seconds); // 调用跳转到指定时间的函数
+                    } else {
+                        handleOpenForwardTime(true)
+                    }
+                }
+            }),
+            "",
+        );
+    }
+
     // 创建link标签，引入iconUrl，插入到iframe的DOM中
     function createStyleTag() {
         const dom = iframeDOM || document;
@@ -216,10 +316,15 @@
 
 
     function init(node) {
-        const setTime = createSetTimeButton()
-        const JumpToTime = createJumpToTimeButton()
-        node.appendChild(createElement(setTime)); // 追加设置时间的按钮
-        node.appendChild(createElement(JumpToTime)); // 追加跳转到时间的按钮
+        const setTime = createSetTimeButton() // 追加设置时间的按钮
+        const JumpToTime = createJumpToTimeButton() // 追加跳转到时间的按钮
+        const forward = createForwardButton() // 追加快进按钮
+        const forward_custom = createForwardTimeButton() // 追加快进自定义按钮
+
+        const append_childs = [setTime, JumpToTime, forward, forward_custom]
+        append_childs.forEach((item) => {
+            node.appendChild(createElement(item))
+        })
     }
 
     // 定义轮询函数
